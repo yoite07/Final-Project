@@ -1,0 +1,135 @@
+---
+title: "Final Project"
+author: "Yiting Liang, Qian Li"
+date: "4/3/2019"
+output: html_document
+---
+```{r}
+#install some packages needed
+
+#install.packages("VIM")
+#install.packages("mice")
+#install.packages("lattice")
+```
+
+```{r}
+#load libarary
+
+#library(VIM)
+#library(lattice)
+library(mice)
+library(tidyverse)
+library(haven)
+library(Hmisc)
+library(car)
+library(lmtest)
+```
+
+```{r}
+#import BRFSS 2017 data
+BRFSS2017<- read_xpt("LLCP2017.XPT")
+```
+
+```{r}
+#subset dataset with variables needed
+varlist<-c("CNCRTYP1","_RFSMOK3","_RFBING5","_IMPRACE","_AGE_G","SEX")
+BRFSS2017_sub<-BRFSS2017[varlist]
+```
+
+```{r}
+#select male only
+BRFSS2017_male<-BRFSS2017_sub[which(BRFSS2017_sub$SEX == 1),]
+```
+
+```{r}
+#see the detail of CNCRTYP1 (19 is prostate cancer)
+table(BRFSS2017_male$CNCRTYP1)
+```
+
+```{r}
+#create a prostate cancer variable
+BRFSS2017_male$prostatecancer <- 0
+BRFSS2017_male$prostatecancer[BRFSS2017_male$CNCRTYP1==19]<-1
+table(BRFSS2017_male$prostatecancer)
+```
+```{r}
+# view the missing situation of smoking and drinking
+table(BRFSS2017_male$`_RFSMOK3`)
+table(BRFSS2017_male$`_RFBING5`)
+```
+```{r}
+#recode missings to NA
+BRFSS2017_male$`_RFSMOK3`[BRFSS2017_male$`_RFSMOK3`==9]<-NA
+BRFSS2017_male$`_RFBING5`[BRFSS2017_male$`_RFBING5`==9]<-NA
+
+
+#see DV distribution among predictors
+table(BRFSS2017_male$prostatecancer,BRFSS2017_male$`_IMPRACE`)
+table(BRFSS2017_male$prostatecancer,BRFSS2017_male$`_AGE_G`)
+table(BRFSS2017_male$prostatecancer,BRFSS2017_male$`_RFSMOK3`)
+table(BRFSS2017_male$prostatecancer,BRFSS2017_male$`_RFBING5`)
+
+#recode age into two groups
+BRFSS2017_male$`_AGE_G`[BRFSS2017_male$`_AGE_G`==2|BRFSS2017_male$`_AGE_G`==3|BRFSS2017_male$`_AGE_G`==4|BRFSS2017_male$`_AGE_G`==5]<-1
+BRFSS2017_male$`_AGE_G`[BRFSS2017_male$`_AGE_G`==6]<-2
+
+#recode race into two groups
+BRFSS2017_male$`_IMPRACE`[BRFSS2017_male$`_IMPRACE`==4|BRFSS2017_male$`_IMPRACE`==5|BRFSS2017_male$`_IMPRACE`==6]<-3
+```
+
+```{r}
+#rename some variables to debug
+BRFSS2017_male$smoking<-BRFSS2017_male$`_RFSMOK3`
+BRFSS2017_male$drinking<-BRFSS2017_male$`_RFBING5`
+BRFSS2017_male$race<-BRFSS2017_male$`_IMPRACE`
+BRFSS2017_male$age<-BRFSS2017_male$`_AGE_G`
+
+#create a sub dataset only contains the variables needed for regression
+varlist2<-c("prostatecancer","smoking","drinking","race","age")
+BRFSS2017_male2<-BRFSS2017_male[varlist2]
+
+#reform the variables to factor
+BRFSS2017_male2$prostatecancer <-as.factor(BRFSS2017_male2$prostatecancer)
+BRFSS2017_male2$smoking <-as.factor(BRFSS2017_male2$smoking)
+BRFSS2017_male2$drinking <-as.factor(BRFSS2017_male2$drinking)
+BRFSS2017_male2$race <-as.factor(BRFSS2017_male2$race)
+BRFSS2017_male2$age <-as.factor(BRFSS2017_male2$age)
+
+#see DV distribution among predictors again
+table(BRFSS2017_male2$prostatecancer,BRFSS2017_male2$race)
+table(BRFSS2017_male2$prostatecancer,BRFSS2017_male2$age)
+table(BRFSS2017_male2$prostatecancer,BRFSS2017_male2$smoking)
+table(BRFSS2017_male2$prostatecancer,BRFSS2017_male2$drinking)
+```
+
+```{r}
+#imputation
+imputedData<-mice(data = BRFSS2017_male2, m = 5, method = 'polyreg', maxit = 50, seed = 500)
+summary(imputedData)
+```
+
+```{r}
+# get descriptive statistics
+table(BRFSS2017_male2$race)
+table(BRFSS2017_male2$age)
+table(BRFSS2017_male2$drinking)
+table(BRFSS2017_male2$smoking)
+table(BRFSS2017_male2$prostatecancer)
+```
+
+
+```{r}
+#run logistic regression
+model <-with(imputedData, exp=glm(prostatecancer ~ smoking + drinking + race +  age , family="binomial"))
+summary(pool(model))
+```
+
+```{r}
+#calculate and print ORs and 95% CIs for the model based on imputed data
+summary(pool(model),exponentiate = T ,conf.int = T)
+```
+
+
+
+
+
